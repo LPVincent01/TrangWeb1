@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trang Báo Sửa Thiết Bị Văn Phòng</title>
+    <link rel="stylesheet" href="firebase-styles.css" />
+    <!-- Firebase SDK v9 -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import {
+        getFirestore,
+        collection,
+        addDoc,
+        updateDoc,
+        doc,
+        onSnapshot,
+        query,
+        orderBy,
+      } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+      // Firebase Configuration - THAY ĐỔI CONFIG NÀY
+      const firebaseConfig = {
+        apiKey: "AIzaSyAk5Th-iEsEU3jGOFqFxZY3JfOsFGyCbSg",
+        authDomain: "trangweb1-5973d.firebaseapp.com",
+        projectId: "trangweb1-5973d",
+        storageBucket: "trangweb1-5973d.firebasestorage.app",
+        messagingSenderId: "111780657212",
+        appId: "1:111780657212:web:249fffd3a9ec9867962b39",
+      };
+
+      // Initialize Firebase
+      const app = initializeApp(firebaseConfig);
+      const db = getFirestore(app);
+      const reportsCollection = collection(db, "bug_reports");
+
+      // Make Firebase available globally
+      window.firebaseApp = {
+        db,
+        reportsCollection,
+        addDoc,
+        updateDoc,
+        doc,
+        onSnapshot,
+        query,
+        orderBy,
+      };
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Loading Screen -->
+      <div id="loading" class="loading-screen">
+        <div class="loading-content">
+          <div class="spinner"></div>
+          <p>Đang tải dữ liệu từ Firebase...</p>
+        </div>
+      </div>
+
+      <!-- Main App -->
+      <div id="app" class="app hidden">
+        <!-- Header -->
+        <header class="header">
+          <h1>
+            🔧 Trang Báo Sửa Thiết Bị Văn Phòng
+            <span class="cloud-icon">☁️</span>
+          </h1>
+          <p>
+            Hệ thống quản lý báo cáo sửa chữa với Firebase Cloud Storage. Dữ
+            liệu được đồng bộ real-time.
+          </p>
+          <div class="stats" id="stats">
+            <div class="stat-item">
+              <div class="stat-dot stat-new"></div>
+              <span>Mới: <span id="stat-new">0</span></span>
+            </div>
+            <div class="stat-item">
+              <div class="stat-dot stat-processing"></div>
+              <span>Đang xử lý: <span id="stat-processing">0</span></span>
+            </div>
+            <div class="stat-item">
+              <div class="stat-dot stat-done"></div>
+              <span>Hoàn thành: <span id="stat-done">0</span></span>
+            </div>
+          </div>
+        </header>
+
+        <!-- Add Report Form -->
+        <div class="add-form">
+          <h3>
+            ➕ Thêm báo cáo mới
+            <span id="saving-indicator" class="saving-indicator hidden"
+              >💾 Đang lưu...</span
+            >
+          </h3>
+          <div class="form-row">
+            <input
+              type="text"
+              id="newTitle"
+              placeholder="Tiêu đề sự cố (ví dụ: Vòi nước rỉ, bóng đèn hỏng...)"
+              class="input-title"
+            />
+            <input
+              type="text"
+              id="newReporter"
+              placeholder="Người báo (tuỳ chọn)"
+              class="input-reporter"
+            />
+            <button id="addBtn" class="btn-add">Thêm báo cáo</button>
+          </div>
+          <textarea
+            id="newDesc"
+            placeholder="Mô tả chi tiết (tuỳ chọn)"
+            rows="2"
+          ></textarea>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+          <div class="search-box">
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="🔍 Tìm kiếm báo cáo..."
+            />
+          </div>
+          <select id="statusFilter">
+            <option value="Tất cả">Tất cả trạng thái</option>
+            <option value="Mới">🟡 Mới</option>
+            <option value="Đang xử lý">🔵 Đang xử lý</option>
+            <option value="Hoàn thành">🟢 Hoàn thành</option>
+          </select>
+          <div class="result-count" id="resultCount">Hiển thị: 0/0 báo cáo</div>
+        </div>
+
+        <!-- Reports Table -->
+        <div class="table-container">
+          <table id="reportsTable">
+            <thead>
+              <tr>
+                <th width="40"></th>
+                <th>Tiêu đề</th>
+                <th class="hidden-mobile">Người báo</th>
+                <th class="hidden-mobile">Ngày tạo</th>
+                <th>Trạng thái</th>
+                <th class="hidden-mobile">Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody id="reportsBody">
+              <!-- Reports will be inserted here -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal -->
+      <div id="modal" class="modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h2 id="modalTitle"></h2>
+            <span class="close">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div class="report-info" id="reportInfo"></div>
+            <div class="notes-section">
+              <h4>📝 Lịch sử ghi chú (<span id="notesCount">0</span>)</h4>
+              <div class="notes-list" id="notesList"></div>
+            </div>
+            <div class="add-note-section">
+              <label>Thêm ghi chú mới</label>
+              <textarea
+                id="newNote"
+                placeholder="Nhập nội dung cập nhật, tiến độ xử lý..."
+                rows="3"
+              ></textarea>
+              <div class="modal-actions">
+                <button id="saveNoteBtn" class="btn-primary">
+                  💾 Lưu ghi chú
+                </button>
+                <button id="setProcessingBtn" class="btn-secondary">
+                  🔄 Đang xử lý
+                </button>
+                <button id="markDoneBtn" class="btn-success">
+                  ✅ Hoàn thành
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <p>
+              ☁️ Dữ liệu được lưu trữ trên Firebase Cloud và đồng bộ real-time
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error Message -->
+      <div id="errorMessage" class="error-message hidden">
+        <div class="error-content">
+          <h3>❌ Lỗi kết nối Firebase</h3>
+          <p>Vui lòng kiểm tra:</p>
+          <ul>
+            <li>Kết nối internet</li>
+            <li>Cấu hình Firebase trong code</li>
+            <li>Firestore Security Rules</li>
+          </ul>
+          <button onclick="location.reload()" class="btn-retry">
+            🔄 Thử lại
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="firebase-script.js"></script>
+  </body>
+</html>
