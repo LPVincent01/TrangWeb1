@@ -70,16 +70,26 @@ function showError(message) {
 }
 
 // Initialize app
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   setupEventListeners()
-  // Wait for Firebase to be loaded
-  setTimeout(() => {
-    if (window.firebaseApp) {
-      loadReportsFromFirebase()
-    } else {
-      showError("Firebase không được tải. Vui lòng kiểm tra cấu hình.")
-    }
-  }, 1000)
+  try {
+    await waitForFirebase(15000, 200)
+    loadReportsFromFirebase()
+  } catch (e) {
+    // Fallback: show UI even if Firebase is not ready
+    console.warn('Firebase chưa sẵn sàng:', e && e.message ? e.message : e)
+    hideLoading()
+    updateStats()
+    filterReports()
+
+    // Keep checking in background and connect when available
+    const lateCheck = setInterval(() => {
+      if (window.firebaseApp) {
+        clearInterval(lateCheck)
+        loadReportsFromFirebase()
+      }
+    }, 1000)
+  }
 })
 
 // Setup event listeners
@@ -140,6 +150,22 @@ function loadReportsFromFirebase() {
 function hideLoading() {
   loadingEl.classList.add("hidden")
   appEl.classList.remove("hidden")
+}
+
+// Wait for Firebase to be available with polling
+function waitForFirebase(maxWaitMs = 15000, intervalMs = 200) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now()
+    const timer = setInterval(() => {
+      if (window.firebaseApp) {
+        clearInterval(timer)
+        resolve()
+      } else if (Date.now() - start >= maxWaitMs) {
+        clearInterval(timer)
+        reject(new Error('Firebase timeout'))
+      }
+    }, intervalMs)
+  })
 }
 
 // Update statistics
